@@ -16,21 +16,13 @@ import java.util.List;
 
 public class EntityMetadataPacket extends PacketContainer {
     private static final boolean USE_DATA_WATCHER;
-    private static final int ITEM_INDEX;
-    private static final int ROTATION_INDEX;
     private @Nullable WrappedDataWatcher dataWatcher; // For <= 1.19.2
     private final List<WrappedDataValue> values = new ArrayList<>(); // For >= 1.19.3
+    private static final int ITEM_INDEX = 9;   // 1.21.6+
+    private static final int ROTATION_INDEX = ITEM_INDEX + 1;  // 10
 
     static {
         USE_DATA_WATCHER = (Internals.MINECRAFT_VERSION < 19.3);
-        if (Internals.MINECRAFT_VERSION < 17) { // Minecraft 1.16.x
-            ITEM_INDEX = 7;
-        } else if (Internals.MINECRAFT_VERSION < 21.6) { // Minecraft 1.17.x to 1.21.5
-            ITEM_INDEX = 8;
-        } else { // Minecraft 1.21.6 and upwards
-            ITEM_INDEX = 9;
-        }
-        ROTATION_INDEX = ITEM_INDEX + 1;
     }
 
     public EntityMetadataPacket() {
