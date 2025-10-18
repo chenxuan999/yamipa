@@ -10,8 +10,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavor: ['bukkit', 'spigot', 'paper', 'purpur']
-        version: ['1.21.8', '1.20.6', '1.19.4', '1.18.2', '1.17.1', '1.16.5']
+        flavor: ['bukkit', 'paper']
+        version: ['1.21.10']
     steps:
       # Download code from repository
       - name: Checkout code
