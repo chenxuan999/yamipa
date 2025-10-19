@@ -7,6 +7,7 @@ import com.comphenix.protocol.reflect.ExactReflection;
 import com.comphenix.protocol.reflect.StructureModifier;
 import com.comphenix.protocol.utility.MinecraftReflection;
 import io.josemmo.bukkit.plugin.utils.Internals;
+import io.josemmo.bukkit.plugin.utils.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import java.lang.reflect.Constructor;
@@ -14,37 +15,48 @@ import java.lang.reflect.ParameterizedType;
 import java.util.Optional;
 
 public class MapDataPacket extends PacketContainer {
-    private static final int LOCKED_INDEX;
+    private static final Logger LOGGER = Logger.getLogger("MapDataPacket");
+    private static final int LOCKED_INDEX = 0; // 固定使用 1.17+ 的值
     private static final @Nullable Constructor<?> MAP_ID_CONSTRUCTOR;
     private @Nullable StructureModifier<?> mapDataModifier;
 
     static {
-        LOCKED_INDEX = (Internals.isLessThan(1, 17)) ? 1 : 0;
-        if (Internals.isLessThan(20, 5)) {
-            MAP_ID_CONSTRUCTOR = null;
-        } else {
+        // 对于 1.21.x，使用新的 MapId 类
+        Constructor<?> constructor = null;
+        try {
             Class<?> mapIdClass = MinecraftReflection.getNullableNMS("world.level.saveddata.maps.MapId");
-            MAP_ID_CONSTRUCTOR = ExactReflection.fromClass(mapIdClass, true).findConstructor(int.class);
+            if (mapIdClass != null) {
+                constructor = ExactReflection.fromClass(mapIdClass, true).findConstructor(int.class);
+            }
+        } catch (Exception e) {
+            LOGGER.warning("Failed to get MapId constructor, will use legacy mode", e);
         }
+        MAP_ID_CONSTRUCTOR = constructor;
     }
 
     public MapDataPacket() {
         super(PacketType.Play.Server.MAP);
         getModifier().writeDefaults();
 
-        if (Internals.isLessThan(1, 17)) {
-            getBooleans().write(0, false); // Disable tracking position
-        } else if (Internals.isLessThan(20, 5)) {
-            Class<?> mapDataType = getModifier().getField(4).getType();
-            Object mapDataInstance = getModifier().read(4);
-            mapDataModifier = new StructureModifier<>(mapDataType).withTarget(mapDataInstance);
-        } else {
+        try {
+            // 固定使用新版本的地图数据格式
             ParameterizedType genericType = (ParameterizedType) getModifier().getField(4).getGenericType();
             Class<?> mapDataType = (Class<?>) genericType.getActualTypeArguments()[0];
             Object mapDataInstance = StructureCache.newInstance(mapDataType);
             getModifier().write(3, Optional.empty());
             getModifier().write(4, Optional.of(mapDataInstance));
             mapDataModifier = new StructureModifier<>(mapDataType).withTarget(mapDataInstance);
+        } catch (Exception e) {
+            LOGGER.warning("Failed to setup new map format, trying legacy mode", e);
+            try {
+                Class<?> mapDataType = getModifier().getField(4).getType();
+                Object mapDataInstance = getModifier().read(4);
+                mapDataModifier = new StructureModifier<>(mapDataType).withTarget(mapDataInstance);
+            } catch (Exception e2) {
+                LOGGER.warning("Failed to setup legacy map format, using basic mode", e2);
+                getBooleans().write(0, false); // Disable tracking position
+                mapDataModifier = null;
+            }
         }
     }
 
@@ -58,7 +70,8 @@ public class MapDataPacket extends PacketContainer {
                 Object mapIdInstance = MAP_ID_CONSTRUCTOR.newInstance(id);
                 ((StructureModifier) getSpecificModifier(mapIdClass)).write(0, mapIdInstance);
             } catch (Exception e) {
-                throw new RuntimeException("Failed to instantiate MapId for map #" + id);
+                LOGGER.warning("Failed to instantiate MapId for map #" + id + ", falling back", e);
+                getIntegers().write(0, id);
             }
         }
         return this;
