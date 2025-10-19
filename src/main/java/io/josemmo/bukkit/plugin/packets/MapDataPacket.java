@@ -16,9 +16,9 @@ import java.util.Optional;
 
 public class MapDataPacket extends PacketContainer {
     private static final Logger LOGGER = Logger.getLogger("MapDataPacket");
-    private static final int LOCKED_INDEX = 0; // 固定使用 1.17+ 的值
     private static final @Nullable Constructor<?> MAP_ID_CONSTRUCTOR;
     private @Nullable StructureModifier<?> mapDataModifier;
+    private static final boolean IS_MODERN_VERSION = true; // 1.21.x 使用新的数据包结构
 
     static {
         // 对于 1.21.x，使用新的 MapId 类
@@ -39,24 +39,31 @@ public class MapDataPacket extends PacketContainer {
         getModifier().writeDefaults();
 
         try {
-            // 固定使用新版本的地图数据格式
-            ParameterizedType genericType = (ParameterizedType) getModifier().getField(4).getGenericType();
-            Class<?> mapDataType = (Class<?>) genericType.getActualTypeArguments()[0];
-            Object mapDataInstance = StructureCache.newInstance(mapDataType);
-            getModifier().write(3, Optional.empty());
-            getModifier().write(4, Optional.of(mapDataInstance));
+            Class<?> mapDataType;
+            Object mapDataInstance;
+            
+            if (IS_MODERN_VERSION) {
+                // 1.21.x 版本使用新的地图数据结构
+                ParameterizedType genericType = (ParameterizedType) getModifier().getField(5).getGenericType();
+                mapDataType = (Class<?>) genericType.getActualTypeArguments()[0];
+                mapDataInstance = StructureCache.newInstance(mapDataType);
+                
+                // 设置默认值
+                getModifier().write(4, Optional.empty()); // MapIconData
+                getModifier().write(5, Optional.of(mapDataInstance)); // MapData
+                getBooleans().write(0, false); // 不跟踪玩家
+                getBooleans().write(1, false); // 不是装饰地图
+            } else {
+                // 旧版本兼容模式
+                mapDataType = getModifier().getField(4).getType();
+                mapDataInstance = getModifier().read(4);
+            }
+            
             mapDataModifier = new StructureModifier<>(mapDataType).withTarget(mapDataInstance);
         } catch (Exception e) {
-            LOGGER.warning("Failed to setup new map format, trying legacy mode", e);
-            try {
-                Class<?> mapDataType = getModifier().getField(4).getType();
-                Object mapDataInstance = getModifier().read(4);
-                mapDataModifier = new StructureModifier<>(mapDataType).withTarget(mapDataInstance);
-            } catch (Exception e2) {
-                LOGGER.warning("Failed to setup legacy map format, using basic mode", e2);
-                getBooleans().write(0, false); // Disable tracking position
-                mapDataModifier = null;
-            }
+            LOGGER.warning("Failed to setup map format", e);
+            getBooleans().write(0, false); // 不跟踪玩家
+            mapDataModifier = null;
         }
     }
 
@@ -100,7 +107,11 @@ public class MapDataPacket extends PacketContainer {
     }
 
     public @NotNull MapDataPacket setLocked(boolean locked) {
-        getBooleans().write(LOCKED_INDEX, locked);
+        if (IS_MODERN_VERSION) {
+            getBooleans().write(1, locked); // 1.21.x 中这是装饰地图标志
+        } else {
+            getBooleans().write(0, locked); // 旧版本中这是锁定标志
+        }
         return this;
     }
 
