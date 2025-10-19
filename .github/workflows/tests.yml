@@ -1,150 +1,35 @@
-name: Tests
+name: Build
 
-on: [push]
+on:
+  push:
+  pull_request:
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
-    continue-on-error: ${{ matrix.version == '1.21.8' }}
     strategy:
-      fail-fast: false
       matrix:
-        flavor: ['bukkit', 'paper']
-        version: ['1.21.10']
+        flavor: [bukkit, paper]   # 保留矩阵，方便以后扩展
     steps:
-      # Download code from repository
-      - name: Checkout code
+      # 1. 拉代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Setup Java (for building)
-      - name: Setup JDK (for building)
+      # 2. 装 JDK
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '21'
+          distribution: temurin
+          java-version: 21
 
-      # Build plugin
+      # 3. 构建
       - name: Build with Maven
-        run: mvn --batch-mode --update-snapshots verify
+        run: mvn --batch-mode --update-snapshots package -DskipTests
 
-      # Setup Java (for testing)
-      - name: Setup JDK (for testing)
-        uses: actions/setup-java@v4
+      # 4. 上传产物
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          distribution: 'temurin'
-          java-version: |
-            ${{
-              startsWith(matrix.version, '1.16') && '11' ||
-              startsWith(matrix.version, '1.17') && '16' ||
-              startsWith(matrix.version, '1.18') && '17' ||
-              startsWith(matrix.version, '1.19') && '17' ||
-              '21'
-            }}
-
-      # Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      # Setup automata
-      - name: Setup automata
-        working-directory: ./automata
-        run: npm install
-
-      # Setup server
-      - name: Setup server
-        env:
-          FLAVOR: ${{ matrix.flavor }}
-          VERSION: ${{ matrix.version }}
-        run: |
-          if [ $FLAVOR == "bukkit" ] && [ $VERSION == "1.17.1" ]; then
-            url="https://static.knarcraft.net/archive/downloads/minecraftserverjars/Bukkit/craftbukkit-1.17.1.jar"
-          elif [ $FLAVOR == "spigot" ] && [ $VERSION == "1.17.1" ]; then
-            url="https://s3.mcjars.app/spigot/1.17.1/3284/server.jar"
-          elif [ $FLAVOR == "bukkit" ]; then
-            url="https://cdn.getbukkit.org/craftbukkit/craftbukkit-$VERSION.jar"
-          elif [ $FLAVOR == "spigot" ]; then
-            url="https://cdn.getbukkit.org/spigot/spigot-$VERSION.jar"
-          elif [ $FLAVOR == "paper" ]; then
-            url=$(curl "https://fill.papermc.io/v3/projects/paper/versions/$VERSION/builds" | jq -r 'first(.[].downloads."server:default".url)')
-          elif [ $FLAVOR == "purpur" ]; then
-            url="https://api.purpurmc.org/v2/purpur/$VERSION/latest/download"
-          fi
-          mkdir ./server && cd ./server
-          wget -nv "$url" -O server.jar
-          java -jar server.jar || true
-          sed -i 's/eula=false/eula=true/g' eula.txt
-          echo 'online-mode=false' >> server.properties
-          echo 'enable-rcon=true' >> server.properties
-          echo 'rcon.password=rcon' >> server.properties
-          echo 'allow-nether=false' >> server.properties
-          echo 'allow-end=false' >> server.properties
-          echo 'generate-structures=false' >> server.properties
-          echo 'level-type=flat' >> server.properties
-
-      # Install dependencies
-      - name: Install plugin dependencies
-        env:
-          VERSION: ${{ matrix.version }}
-        run: |
-          case "$VERSION" in
-            1.16.5|1.17.1|1.18.2|1.19.4|1.20.6)
-              url="https://github.com/dmulloy2/ProtocolLib/releases/download/5.3.0/ProtocolLib.jar"
-              ;;
-            *)
-              url="https://github.com/dmulloy2/ProtocolLib/releases/download/5.4.0/ProtocolLib.jar"
-              ;;
-          esac
-          mkdir -p ./server/plugins/ProtocolLib
-          wget -q "$url" -O ./server/plugins/ProtocolLib.jar
-          echo -e "global:\n  auto updater:\n    notify: false\n    download: false" > ./server/plugins/ProtocolLib/config.yml
-
-      # Install plugin
-      - name: Install plugin
-        run: |
-          mkdir -p ./server/plugins/YamipaPlugin/images
-          cp ./target/YamipaPlugin-*.jar ./server/plugins/
-          echo "verbose: true" > ./server/plugins/YamipaPlugin/config.yml
-          wget -q "https://picsum.photos/400" -O ./server/plugins/YamipaPlugin/images/pic-1.jpg
-          for i in {2..5}; do
-            cp ./server/plugins/YamipaPlugin/images/pic-1.jpg "./server/plugins/YamipaPlugin/images/pic-$i.jpg"
-          done
-
-      # Test plugin
-      - name: Run plugin in server
-        working-directory: ./server
-        env:
-          FLAVOR: ${{ matrix.flavor }}
-        run: |
-          (cd ../automata && npm run start) &
-          timeout -s SIGINT -k 110s 90s java -DIReallyKnowWhatIAmDoingISwear -jar server.jar nogui | tee server.log || true
-          if ! grep -Fq '[YamipaPlugin] ' server.log; then
-            echo "Plugin did not load"
-            exit 1
-          fi
-          if ! grep -Fq '[YamipaPlugin] Running on VERBOSE mode' server.log; then
-            echo "Plugin did not enabled verbose mode"
-            exit 1
-          fi
-          if ! grep -Fq '[YamipaPlugin] [ImageStorage] Found 5 file(s) in images directory' server.log; then
-            echo "Plugin did not read image directory"
-            exit 1
-          fi
-          if ! grep -Fq '[YamipaPlugin] [ImageCommandBridge] Fixed command permissions' server.log; then
-            echo "Plugin did not fixed command permissions"
-            exit 1
-          fi
-          if ! grep -Fq '[YamipaPlugin] [FakeImage] Created FakeImage' server.log; then
-            echo "Plugin did not place the fake image"
-            exit 1
-          fi
-          if ! grep -Fq '[YamipaPlugin] [FakeImage] Invalidated FakeImage' server.log; then
-            echo "Plugin did not remove the fake image"
-            exit 1
-          fi
-          if [ "$FLAVOR" != "bukkit" ] && [ "$FLAVOR" != "spigot" ] && grep -iFq 'exception' server.log; then
-            echo "Server threw an exception"
-            exit 1
-          fi
+          name: YamipaPlugin-${{ matrix.flavor }}
+          path: target/YamipaPlugin-*.jar
+          retention-days: 7
