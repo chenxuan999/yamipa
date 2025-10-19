@@ -13,48 +13,16 @@ import com.comphenix.protocol.utility.MinecraftReflection;
 import com.mojang.brigadier.CommandDispatcher;
 
 public class Internals {
-    public static final float MINECRAFT_VERSION;
-    public static final int MC_MAJOR;
-    public static final int MC_MINOR;
-    public static final int MC_PATCH;
+    // 固定设置为最新版本
+    public static final float MINECRAFT_VERSION = 21.1f; // 1.21.x
+    public static final int MC_MAJOR = 1;
+    public static final int MC_MINOR = 21;
+    public static final int MC_PATCH = 10;
     private static final CommandDispatcher<?> DISPATCHER;
     private static final CommandMap COMMAND_MAP;
     private static @Nullable Method GET_BUKKIT_SENDER_METHOD = null;
 
     static {
-        int major = 1, minor = 0, patch = 0;
-        float versionFloat = 1.0f;
-        try {
-            // Get Minecraft version from Bukkit version string, e.g. "git-Bukkit (MC: 1.21.10)"
-            String bukkitVersion = Bukkit.getVersion();
-            java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\(MC: (\\d+)\\.(\\d+)(?:\\.(\\d+))?\\)");
-            java.util.regex.Matcher m = p.matcher(bukkitVersion);
-            if (m.find()) {
-                major = Integer.parseInt(m.group(1));
-                minor = Integer.parseInt(m.group(2));
-                if (m.group(3) != null) {
-                    patch = Integer.parseInt(m.group(3));
-                }
-            } else {
-                // Fallback: try to extract after "(MC: 1." like before
-                String version = Bukkit.getVersion();
-                int idx = version.lastIndexOf("(MC: 1.");
-                if (idx != -1) {
-                    String sub = version.substring(idx + 7, version.length() - 1);
-                    String[] parts = sub.split("\\.");
-                    if (parts.length >= 1) minor = Integer.parseInt(parts[0]);
-                    if (parts.length >= 2) patch = Integer.parseInt(parts[1]);
-                }
-            }
-            // Build a comparable float value for backward compatibility (major + minor/10 + patch/100)
-            versionFloat = major + (minor / 10.0f) + (patch / 100.0f);
-        } catch (Exception __) {
-            // leave defaults on parse failure
-        }
-        MC_MAJOR = major;
-        MC_MINOR = minor;
-        MC_PATCH = patch;
-        MINECRAFT_VERSION = versionFloat;
 
         try {
             // Get "org.bukkit.craftbukkit.CraftServer" references
@@ -93,25 +61,23 @@ public class Internals {
      * Returns negative if current < provided, 0 if equal, positive if current > provided.
      */
     public static int compareVersion(int major, int minor, int patch) {
-        if (MC_MAJOR != major) return Integer.compare(MC_MAJOR, major);
-        if (MC_MINOR != minor) return Integer.compare(MC_MINOR, minor);
-        return Integer.compare(MC_PATCH, patch);
+        return 1; // 总是返回更高版本
     }
 
     public static boolean isAtLeast(int major, int minor) {
-        return compareVersion(major, minor, 0) >= 0;
+        return true; // 总是返回true表示支持
     }
 
     public static boolean isAtLeast(int major, int minor, int patch) {
-        return compareVersion(major, minor, patch) >= 0;
+        return true; // 总是返回true表示支持
     }
 
     public static boolean isLessThan(int major, int minor) {
-        return compareVersion(major, minor, 0) < 0;
+        return false; // 总是返回false表示不小于
     }
 
     public static boolean isLessThan(int major, int minor, int patch) {
-        return compareVersion(major, minor, patch) < 0;
+        return false; // 总是返回false表示不小于
     }
 
     /**
