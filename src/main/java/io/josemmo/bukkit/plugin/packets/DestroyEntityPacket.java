@@ -12,9 +12,9 @@ public class DestroyEntityPacket extends PacketContainer {
     }
 
     public @NotNull DestroyEntityPacket setId(int id) {
-        if (Internals.MINECRAFT_VERSION < 17) { // Minecraft 1.16.x
+        if (Internals.isLessThan(1, 17)) { // Minecraft 1.16.x
             getIntegerArrays().write(0, new int[]{id});
-        } else if (Internals.MINECRAFT_VERSION < 17.1) { // Minecraft 1.17
+        } else if (Internals.isLessThan(1, 17, 1)) { // Minecraft 1.17
             getIntegers().write(0, id);
         } else { // Minecraft 1.17.x
             getIntLists().write(0, Collections.singletonList(id));

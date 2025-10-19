@@ -8,7 +8,7 @@ import io.josemmo.bukkit.plugin.utils.Internals;
 import org.jetbrains.annotations.NotNull;
 
 public class ActionBarPacket extends PacketContainer {
-    private static final boolean USE_TITLE = (Internals.MINECRAFT_VERSION < 17);
+    private static final boolean USE_TITLE = (Internals.isLessThan(1, 17));
 
     @SuppressWarnings("deprecation")
     public ActionBarPacket() {
